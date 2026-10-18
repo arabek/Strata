@@ -200,32 +200,32 @@ __global__ void bf16_f32_mmvf_rows_kernel(const float* __restrict__ x, int64_t l
         }
         const int r = j / NT, k = j % NT;
         if (own && o0 + r < n_out && k < n_tok) y[(size_t) k * ldy + o0 + r] = sum;
-        return;
-    }
-#pragma unroll
-    for (int r = 0; r < RPB; ++r)
-#pragma unroll
-        for (int k = 0; k < NT; ++k) acc[r][k] = mmvf_warp_sum(acc[r][k]);
-    if constexpr (BLOCK_SIZE > 32) {
-        if ((t & 31) == 0)
-#pragma unroll
-            for (int r = 0; r < RPB; ++r)
-#pragma unroll
-                for (int k = 0; k < NT; ++k) partials[r][k][t / 32] = acc[r][k];
-        __syncthreads();
-        if (t < 32)
-#pragma unroll
-            for (int r = 0; r < RPB; ++r)
-#pragma unroll
-                for (int k = 0; k < NT; ++k) acc[r][k] = mmvf_warp_sum(partials[r][k][t]);
-    }
-    if (t == 0)
+    } else {
 #pragma unroll
         for (int r = 0; r < RPB; ++r)
-            if (o0 + r < n_out)
 #pragma unroll
-                for (int k = 0; k < NT; ++k)
-                    if (k < n_tok) y[(size_t) k * ldy + o0 + r] = acc[r][k];
+            for (int k = 0; k < NT; ++k) acc[r][k] = mmvf_warp_sum(acc[r][k]);
+        if constexpr (BLOCK_SIZE > 32) {
+            if ((t & 31) == 0)
+#pragma unroll
+                for (int r = 0; r < RPB; ++r)
+#pragma unroll
+                    for (int k = 0; k < NT; ++k) partials[r][k][t / 32] = acc[r][k];
+            __syncthreads();
+            if (t < 32)
+#pragma unroll
+                for (int r = 0; r < RPB; ++r)
+#pragma unroll
+                    for (int k = 0; k < NT; ++k) acc[r][k] = mmvf_warp_sum(partials[r][k][t]);
+        }
+        if (t == 0)
+#pragma unroll
+            for (int r = 0; r < RPB; ++r)
+                if (o0 + r < n_out)
+#pragma unroll
+                    for (int k = 0; k < NT; ++k)
+                        if (k < n_tok) y[(size_t) k * ldy + o0 + r] = acc[r][k];
+    }
 }
 
 template <int B>
